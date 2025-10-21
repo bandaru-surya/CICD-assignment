@@ -1,10 +1,24 @@
+
+#  CI/CD Pipeline for Flask Backend Application
+
+# This workflow installs dependencies, lints Python code, runs tests,
+# builds a Docker image, logs in to Docker Hub, and pushes the image.
+
 name: CI/CD
 
+
+# 1. Trigger Conditions
+
+# The pipeline runs automatically when you push or create a pull request
+# targeting the master branch.
 on:
   push:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+
+
+# 2. CI Job — Backend (Flask)
 
 jobs:
   backend_flask:
@@ -12,54 +26,89 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the repository
+    
+      # Step 1: Checkout the repository code
+     
       - uses: actions/checkout@v3
 
-      # Set up Python
+     
+      # Step 2: Set up Python environment
+      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.9"
 
-      # Install Python dependencies
+      
+      # Step 3: Install Python dependencies
+     
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      # Step 3: Lint Python code
-      #### 
+     
+      # Step 4: Lint Python code using flake8
+     
+      - name: Lint Python code
+        run: |
+          pip install flake8
+          if [ -f .flake8 ] || [ -f setup.cfg ] || [ -f tox.ini ] || [ -f .pep8 ]; then
+            flake8 .
+          else
+            echo "No lint configuration found, running default lint check."
+            flake8 .
+          fi
 
-      # Step 4: Run Python tests
-      ####
+      
+      # Step 5: Run Python tests using pytest
+      
+      - name: Run Python tests
+        run: |
+          pip install pytest
+          if [ -f pytest.ini ] || ls tests; then
+            pytest
+          else
+            echo "No tests found, skipping tests."
+          fi
+
+
+# 3. CD Job — Build & Deploy to Docker Hub
 
   deploy:
     name: Deploy & Push to Docker Hub
-    needs: [backend_flask]
+    needs: [backend_flask]  # Ensures this runs only if CI passes
     runs-on: ubuntu-latest
-    # Important step - add your environment name
-    # environment: PROD
+    # Optional: Define your GitHub environment here
+    # environment: TEST or PROD
+
     steps:
-        - uses: actions/checkout@v3
+     
+      # Step 6: Checkout code again for deploy job
+      
+      - uses: actions/checkout@v3
 
-        # Optional: List repository files to verify the docker-compose file exists
-        - name: List repository files
-          run: ls -al
+     
+      # Step 7: List repository files (optional debug step)
+     
+      - name: List repository files
+        run: ls -al
 
-    # Step 7: Build docker image 
-    # Go to dockerhub.com
-    # Create a new repository - backend_flask
-    # Create a new access token - <access_token>
-    # Note down your username - <username>
-    # Add the following secrets to your GitHub repository - Environment (name = TEST)
-    # add the Environment name to the deploy job above (important step)
-    # https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions
-    #### 
+     
+      # Step 8: Build Docker image
+      
+      - name: Build Docker Image
+        run: |
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/backend_flask:latest .
 
-    # Step 8: # Log in to Docker Hub
-    #### 
+      
+      # Step 9: Log in to Docker Hub
+     
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKERHUB_ACCESS_TOKEN }}" | docker login --username ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
 
-
-    # Step 8: Push docker image to dockerhub
-    ####
-    
+     
+      # Step 10: Push Docker image to Docker Hub
+     
+      - name: Push Docker Image
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/backend_flask:latest
